@@ -2,11 +2,13 @@ import streamlit as st
 import requests
 from streamlit_autorefresh import st_autorefresh
 
-# --- AUTO REFRESH EVERY 5 SECONDS ---
+# --- AUTO REFRESH ---
 st_autorefresh(interval=5000, key="btc_refresh")
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Live BTC Dashboard", layout="wide")
+
+# --- DARK THEME ---
 st.markdown(
     """
     <style>
@@ -15,24 +17,23 @@ st.markdown(
         color: #ffffff;
         font-family: 'Arial', sans-serif;
     }
-    .big-font {
-        font-size: 48px !important;
+    .price {
+        font-size: 60px;
         font-weight: bold;
     }
-    .metric-label {
-        font-size: 18px !important;
-        color: #a1a1a1;
-    }
-    .metric-value {
-        font-size: 36px !important;
-    }
-    .green {
+    .change-positive {
         color: #00ff00;
+        font-size: 28px;
         font-weight: bold;
     }
-    .red {
+    .change-negative {
         color: #ff4c4c;
+        font-size: 28px;
         font-weight: bold;
+    }
+    .metrics {
+        font-size: 20px;
+        color: #a1a1a1;
     }
     </style>
     """, unsafe_allow_html=True
@@ -52,18 +53,16 @@ def get_btc_data():
         low_24h = market_data.get('low_24h', {}).get('usd', "N/A")
         high_24h = market_data.get('high_24h', {}).get('usd', "N/A")
         return price, change_24h, low_24h, high_24h
-    except Exception as e:
+    except:
         return "Error", "Error", "Error", "Error"
 
-# --- FETCH BTC DATA ---
+# --- FETCH DATA ---
 price, change_24h, low_24h, high_24h = get_btc_data()
 
-# --- DISPLAY BTC PRICE ---
-col1, col2 = st.columns([2, 1])
-with col1:
-    st.markdown(f"<div class='big-font'>${price}</div>", unsafe_allow_html=True)
-with col2:
-    change_color = "green" if isinstance(change_24h, (int, float)) and change_24h >= 0 else "red"
-    st.markdown(f"<div class='{change_color}'>24h: {change_24h}%</div>", unsafe_allow_html=True)
+# --- DISPLAY ---
+st.markdown(f"<div class='price'>${price}</div>", unsafe_allow_html=True)
 
-st.markdown(f"<div class='metric-label'>24h Low: ${low_24h} | 24h High: ${high_24h}</div>", unsafe_allow_html=True)
+change_class = "change-positive" if isinstance(change_24h, (int, float)) and change_24h >= 0 else "change-negative"
+st.markdown(f"<div class='{change_class}'>24h: {change_24h}%</div>", unsafe_allow_html=True)
+
+st.markdown(f"<div class='metrics'>24h Low: ${low_24h} | 24h High: ${high_24h}</div>", unsafe_allow_html=True)
