@@ -1,95 +1,118 @@
 import streamlit as st
-import requests
 import pandas as pd
-import plotly.graph_objects as go
+from binance.client import Client
 from streamlit_autorefresh import st_autorefresh
-import time
 
-# --- AUTO REFRESH EVERY 5 SECONDS ---
-st_autorefresh(interval=5000, key="btc_refresh")
+# --- AUTO REFRESH ---
+st_autorefresh(interval=5000, key="crypto_refresh")  # refresh every 5 sec
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Live BTC Dashboard", layout="wide")
-st.title("🚀 Live Bitcoin Dashboard")
 
-# --- DARK THEME CSS ---
+# --- BINANCE CLIENT (Public data only) ---
+client = Client("", "")  # empty strings for public data
+
+symbol = "BTCUSDT"
+
+# --- FETCH LIVE DATA ---
+ticker = client.get_symbol_ticker(symbol=symbol)
+price = float(ticker["price"])
+
+stats = client.get_ticker(symbol=symbol)
+high = float(stats["highPrice"])
+low = float(stats["lowPrice"])
+change = float(stats["priceChangePercent"])
+volume = float(stats["quoteVolume"])
+
+# --- FETCH ORDER BOOK ---
+depth = client.get_order_book(symbol=symbol, limit=10)
+bids = depth["bids"]
+asks = depth["asks"]
+
+# Prepare dataframe for order book
+df_bids = pd.DataFrame(bids, columns=["Price (USDT)", "Amount (BTC)"])
+df_bids["Price (USDT)"] = df_bids["Price (USDT)"].astype(float)
+df_bids["Amount (BTC)"] = df_bids["Amount (BTC)"].astype(float)
+df_bids["Type"] = "Bid"
+
+df_asks = pd.DataFrame(asks, columns=["Price (USDT)", "Amount (BTC)"])
+df_asks["Price (USDT)"] = df_asks["Price (USDT)"].astype(float)
+df_asks["Amount (BTC)"] = df_asks["Amount (BTC)"].astype(float)
+df_asks["Type"] = "Ask"
+
+# Concatenate and reset index
+df_orderbook = pd.concat([df_bids, df_asks]).reset_index(drop=True)
+
+# --- FETCH HISTORICAL DATA (24h chart) ---
+klines = client.get_klines(symbol=symbol, interval=Client.KLINE_INTERVAL_1HOUR, limit=24)
+df_chart = pd.DataFrame(klines, columns=[
+    "Open time","Open","High","Low","Close","Volume","Close time",
+    "Quote asset volume","Number of trades","Taker buy base","Taker buy quote","Ignore"
+])
+df_chart["Close"] = df_chart["Close"].astype(float)
+
+# --- CSS STYLING ---
 st.markdown("""
 <style>
-body { background-color: #0e1117; color: #ffffff; font-family: Arial, sans-serif; }
-.price { font-size: 60px; font-weight: bold; }
-.change-positive { color: #00ff00; font-size: 28px; font-weight: bold; }
-.change-negative { color: #ff4c4c; font-size: 28px; font-weight: bold; }
-.metrics { font-size: 20px; color: #a1a1a1; }
+body { background-color: #0f1117; color: white; font-family: Arial, sans-serif; }
+
+/* Metric cards */
+.metric-card {
+    background-color: #1a1a2e;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 3px 3px 15px rgba(0,0,0,0.6);
+    margin-bottom:10px;
+}
+.metric-card .label { 
+    color: #ffffff;       /* bright white headers */
+    font-size:16px;       /* slightly larger font */
+    font-weight: bold;    /* bold for emphasis */
+}
+.metric-card .value { 
+    font-size:28px; 
+    font-weight:bold; 
+}
+.metric-card .delta { 
+    margin-top:5px; 
+    font-size:14px; 
+    font-weight:bold; 
+}
+
+/* Order book table */
+table { color: white; }
+td { padding: 5px; text-align: center; }
+
+/* Vivid colors for order book */
+.bid { background-color: #00ff00 !important; color: black; }   /* bright green */
+.ask { background-color: #ff0000 !important; color: white; }   /* bright red */
 </style>
 """, unsafe_allow_html=True)
 
-# --- CONTAINER FOR DASHBOARD ---
-btc_container = st.empty()
+# --- DASHBOARD HEADER (METRICS) ---
+col1, col2, col3, col4 = st.columns(4)
+col1.markdown(f"<div class='metric-card'><div class='label'>Price</div><div class='value'>${price:,.2f}</div><div class='delta'>{float(change):+.2f}%</div></div>", unsafe_allow_html=True)
+col2.markdown(f"<div class='metric-card'><div class='label'>24h High</div><div class='value'>${high:,.2f}</div></div>", unsafe_allow_html=True)
+col3.markdown(f"<div class='metric-card'><div class='label'>24h Low</div><div class='value'>${low:,.2f}</div></div>", unsafe_allow_html=True)
+col4.markdown(f"<div class='metric-card'><div class='label'>24h Volume</div><div class='value'>{volume:,.2f} USDT</div></div>", unsafe_allow_html=True)
 
-# --- FUNCTION TO FETCH CURRENT BTC DATA WITH RETRIES ---
-def get_btc_data(retries=3):
-    url = "https://api.coingecko.com/api/v3/coins/bitcoin"
-    for _ in range(retries):
-        try:
-            res = requests.get(url, timeout=5).json()
-            market = res.get("market_data", {})
-            price = market.get("current_price", {}).get("usd")
-            change_24h = market.get("price_change_percentage_24h")
-            low_24h = market.get("low_24h", {}).get("usd")
-            high_24h = market.get("high_24h", {}).get("usd")
-            if price is not None:
-                return price, change_24h, low_24h, high_24h
-        except:
-            time.sleep(1)
-    # Fallback if API fails
-    return "N/A", "N/A", "N/A", "N/A"
+st.markdown("---")
 
-# --- FUNCTION TO FETCH BTC HISTORY ---
-def get_btc_history(days=1, retries=3):
-    url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
-    params = {"vs_currency":"usd","days":days}
-    for _ in range(retries):
-        try:
-            res = requests.get(url, params=params, timeout=5).json()
-            prices = res.get("prices", [])
-            if prices:
-                df = pd.DataFrame(prices, columns=["timestamp","price"])
-                df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-                return df
-        except:
-            time.sleep(1)
-    return pd.DataFrame(columns=["timestamp","price"])
+# --- MAIN LAYOUT: CHART + ORDER BOOK ---
+chart_col, order_col = st.columns([3, 1])
 
-# --- UPDATE DASHBOARD ---
-with btc_container:
-    price, change_24h, low_24h, high_24h = get_btc_data()
-    history_df = get_btc_history(days=1)
+# --- PRICE CHART ---
+with chart_col:
+    st.subheader(f"{symbol} Price Chart (Last 24h)")
+    st.line_chart(df_chart["Close"], use_container_width=True)
 
-    # --- DISPLAY METRICS ---
-    col1, col2 = st.columns([2,1])
-    with col1:
-        st.markdown(f"<div class='price'>${price}</div>", unsafe_allow_html=True)
-    with col2:
-        change_class = "change-positive" if isinstance(change_24h,(int,float)) and change_24h>=0 else "change-negative"
-        st.markdown(f"<div class='{change_class}'>{change_24h}% 24h</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='metrics'>24h Low: ${low_24h} | 24h High: ${high_24h}</div>", unsafe_allow_html=True)
+# --- ORDER BOOK ---
+with order_col:
+    st.subheader("Order Book (Top 10)")
+    def style_orderbook(row):
+        return ["background-color: #00ff00; color: black" if t=="Bid" else "background-color: #ff0000; color: white" for t in row["Type"]]
 
-    # --- PLOT BTC PRICE HISTORY ---
-    if not history_df.empty:
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=history_df["timestamp"],
-            y=history_df["price"],
-            mode="lines",
-            line=dict(color="#00cc96", width=2),
-            name="BTC Price"
-        ))
-        fig.update_layout(
-            xaxis_title="Time",
-            yaxis_title="Price (USD)",
-            template="plotly_dark",
-            margin=dict(l=20,r=20,t=30,b=20)
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.write("⚠️ Price history not available. Showing current price only.")
+    st.dataframe(
+        df_orderbook.style.apply(style_orderbook, axis=1).set_properties(**{"background-color": "#1a1a2e", "color": "white"})
+    )
