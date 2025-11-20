@@ -1,6 +1,6 @@
 streamlit
+requests
 pandas
 pandas_ta
-python-binance
+plotly
 streamlit-autorefresh
-
