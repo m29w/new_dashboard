@@ -1,11 +1,13 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
+from streamlit_autorefresh import st_autorefresh
 
 # --- AUTO REFRESH EVERY 5 SECONDS ---
-st_autorefresh = st.experimental_rerun  # will refresh manually via st_autorefresh later
+st_autorefresh(interval=5000, key="crypto_dashboard_refresh")
 
+# --- PAGE CONFIG ---
 st.set_page_config(page_title="Live BTC Dashboard", layout="wide")
 
 # --- DASHBOARD STYLING ---
@@ -97,6 +99,3 @@ with order_col:
         return ["background-color: #00ff00; color: black" if t=="Bid" else "background-color: #ff0000; color: white" for t in row["Type"]]
 
     st.dataframe(order_book.style.apply(style_orderbook, axis=1).set_properties(**{"background-color": "#111111", "color": "white"}))
-
-# --- AUTO REFRESH EVERY 5 SECONDS ---
-st.experimental_rerun()
