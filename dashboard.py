@@ -23,27 +23,31 @@ body { background-color: #0e1117; color: #ffffff; font-family: Arial, sans-serif
 </style>
 """, unsafe_allow_html=True)
 
-# --- CONTAINER FOR FULL DASHBOARD ---
+# --- CONTAINER FOR DASHBOARD ---
 btc_container = st.empty()
 
-# --- FUNCTION TO FETCH LIVE BTC DATA ---
-def get_btc_data():
+# --- FUNCTION TO FETCH CURRENT BTC DATA WITH RETRIES ---
+def get_btc_data(retries=3):
     url = "https://api.coingecko.com/api/v3/coins/bitcoin"
-    try:
-        res = requests.get(url, timeout=5).json()
-        market = res.get("market_data", {})
-        price = market.get("current_price", {}).get("usd", "N/A")
-        change_24h = market.get("price_change_percentage_24h", "N/A")
-        low_24h = market.get("low_24h", {}).get("usd", "N/A")
-        high_24h = market.get("high_24h", {}).get("usd", "N/A")
-        return price, change_24h, low_24h, high_24h
-    except:
-        return "Error", "Error", "Error", "Error"
+    for _ in range(retries):
+        try:
+            res = requests.get(url, timeout=5).json()
+            market = res.get("market_data", {})
+            price = market.get("current_price", {}).get("usd")
+            change_24h = market.get("price_change_percentage_24h")
+            low_24h = market.get("low_24h", {}).get("usd")
+            high_24h = market.get("high_24h", {}).get("usd")
+            if price is not None:
+                return price, change_24h, low_24h, high_24h
+        except:
+            time.sleep(1)
+    # Fallback if API fails
+    return "N/A", "N/A", "N/A", "N/A"
 
-# --- FUNCTION TO FETCH BTC PRICE HISTORY WITH RETRIES ---
+# --- FUNCTION TO FETCH BTC HISTORY ---
 def get_btc_history(days=1, retries=3):
     url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
-    params = {"vs_currency": "usd", "days": days}
+    params = {"vs_currency":"usd","days":days}
     for _ in range(retries):
         try:
             res = requests.get(url, params=params, timeout=5).json()
@@ -56,9 +60,8 @@ def get_btc_history(days=1, retries=3):
             time.sleep(1)
     return pd.DataFrame(columns=["timestamp","price"])
 
-# --- UPDATE DASHBOARD EACH REFRESH ---
+# --- UPDATE DASHBOARD ---
 with btc_container:
-    # Fetch data
     price, change_24h, low_24h, high_24h = get_btc_data()
     history_df = get_btc_history(days=1)
 
